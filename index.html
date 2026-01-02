@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cap Citoyen - Quiz de Naturalisation</title>
+    
+    <link rel="icon" type="image/png" href="france.png">
+    <link rel="apple-touch-icon" href="france.png">
+    <style>
+        :root {
+            --primary: #2c3e50;
+            --accent: #3498db;
+            --success: #27ae60;
+            --danger: #c0392b;
+            --bg: #ecf0f1;
+            --card: #ffffff;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            color: var(--primary);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+
+        /* Canvas for Fireworks */
+        #fireworks-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 999;
+        }
+
+        .container {
+            background-color: var(--card);
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 700px;
+            text-align: center;
+            position: relative;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            min-height: 400px; /* Minimum height to keep footer at bottom */
+        }
+
+        /* LOGO STYLING */
+        .app-logo {
+            width: 80px; /* Adjust size here */
+            height: auto;
+            margin: 0 auto 20px auto;
+            display: block;
+        }
+
+        h1 { margin-bottom: 10px; }
+
+        /* FOOTER DISCLAIMER STYLING */
+        .footer-disclaimer {
+            margin-top: 40px;
+            padding-top: 15px;
+            border-top: 1px solid #ecf0f1;
+            font-size: 0.75em;
+            color: #95a5a6;
+            line-height: 1.4;
+        }
+
+        /* Spinner */
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--accent);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 30px auto;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Dropdown Styling */
+        .select-group { margin: 25px 0; text-align: left; display: inline-block; }
+        label { display: block; margin-bottom: 8px; font-weight: 600; color: #7f8c8d; font-size: 0.9em; }
+        select {
+            width: 100%; min-width: 250px; padding: 12px; border-radius: 8px;
+            border: 2px solid #bdc3c7; background-color: #fff; font-size: 1.1em;
+            color: var(--primary); cursor: pointer; outline: none;
+        }
+        select:focus { border-color: var(--accent); }
+
+        /* Quiz UI */
+        .hidden { display: none !important; }
+        
+        .progress-bar-container { background-color: #e0e0e0; border-radius: 10px; height: 8px; margin-bottom: 15px; overflow: hidden; }
+        .progress-bar { height: 100%; background-color: var(--accent); width: 0%; transition: width 0.3s ease; }
+
+        .stats-bar { display: flex; justify-content: space-between; font-size: 0.9em; color: #7f8c8d; margin-bottom: 25px; }
+
+        .question-text { font-size: 1.3em; font-weight: 600; margin-bottom: 30px; line-height: 1.4; min-height: 60px; }
+
+        .options-grid { display: grid; gap: 12px; }
+
+        .option-btn {
+            background: #f8f9fa; border: 2px solid #bdc3c7; padding: 15px 20px;
+            border-radius: 8px; cursor: pointer; font-size: 1em; transition: all 0.2s;
+            text-align: left; width: 100%; color: var(--primary); font-weight: 500;
+        }
+        .option-btn:hover:not(:disabled) { background: #dfe6e9; border-color: var(--accent); }
+        .option-btn:disabled { cursor: default; opacity: 0.8; }
+        .option-btn.correct { background-color: var(--success) !important; color: white !important; border-color: var(--success) !important; }
+        .option-btn.wrong { background-color: var(--danger) !important; color: white !important; border-color: var(--danger) !important; }
+
+        .next-btn {
+            margin-top: 25px; background-color: var(--accent); color: white; border: none;
+            padding: 12px 30px; border-radius: 50px; font-size: 1.1em; cursor: pointer;
+            font-weight: bold; box-shadow: 0 4px 10px rgba(52, 152, 219, 0.3); transition: transform 0.2s;
+        }
+        .next-btn:hover { background-color: #2980b9; transform: translateY(-2px); }
+
+        .score-big { font-size: 4em; font-weight: bold; color: var(--accent); margin: 20px 0; }
+        .error-msg { color: var(--danger); background: #fadbd8; padding: 15px; border-radius: 8px; margin-top: 20px; text-align: left; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+
+<canvas id="fireworks-canvas"></canvas>
+
+<div class="container">
+    
+    <div>
+        <img src="france.png" alt="Logo France" class="app-logo">
+    </div>
+
+    <div id="loading-screen">
+        <h1>Chargement</h1>
+        <div class="spinner"></div>
+        <p>Recherche du fichier <strong>qcm.csv</strong>...</p>
+        <div id="error-box" class="hidden error-msg"></div>
+    </div>
+
+    <div id="start-screen" class="hidden">
+        <h1>QCM de Naturalisation</h1>
+        <p>Base de données chargée : <b id="db-size">0</b> questions.</p>
+        
+        <div class="select-group">
+            <label for="q-count-select">Nombre de questions pour ce test :</label>
+            <select id="q-count-select"></select>
+        </div>
+        <br>
+        <button class="next-btn" onclick="startQuiz()">Commencer le Test</button>
+    </div>
+
+    <div id="quiz-screen" class="hidden">
+        <div class="progress-bar-container">
+            <div class="progress-bar" id="progress-bar"></div>
+        </div>
+        <div class="stats-bar">
+            <span>Question: <b id="q-current">1</b>/<span id="q-total">40</span></span>
+            <span>Score: <b id="score-live">0</b></span>
+        </div>
+
+        <div class="question-text" id="question-text"></div>
+        <div class="options-grid" id="options-container"></div>
+        
+        <button id="next-btn" class="next-btn hidden" onclick="nextQuestion()">Suivant</button>
+    </div>
+
+    <div id="result-screen" class="hidden">
+        <h1 id="result-title">Terminé !</h1>
+        <p>Votre score final :</p>
+        <div class="score-big"><span id="final-score">0</span>/<span id="final-total">0</span></div>
+        <p id="feedback-text"></p>
+        <button class="next-btn" onclick="restartQuiz()">Recommencer</button>
+    </div>
+
+    <div class="footer-disclaimer">
+        ⚠️ <strong>Note importante :</strong> Ce site est un outil d'entraînement privé et <strong>non officiel</strong>.<br>
+        Il n'est pas affilié, approuvé ou lié à l'administration française.
+    </div>
+
+</div>
+
+<script>
+    let allQuestions = [];
+    let quizPool = [];
+    let currentIndex = 0;
+    let score = 0;
+    let currentLimit = 0;
+
+    // --- 1. LOAD CSV ---
+    window.addEventListener('DOMContentLoaded', () => {
+        fetch('qcm.csv')
+            .then(res => {
+                if (!res.ok) throw new Error("Erreur HTTP: " + res.status);
+                return res.text();
+            })
+            .then(parseCSV)
+            .catch(showError);
+    });
+
+    function showError(err) {
+        const box = document.getElementById('error-box');
+        box.classList.remove('hidden');
+        document.querySelector('.spinner').style.display = 'none';
+        box.innerHTML = `<strong>Erreur:</strong> ${err.message}<br>Vérifiez que qcm.csv est présent.`;
+    }
+
+    // --- 2. PARSE CSV ---
+    function parseCSV(text) {
+        const rows = [];
+        let currentRow = [];
+        let inQuote = false;
+        let token = '';
+
+        text = text.trim();
+
+        for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+            if (char === '"' && text[i+1] === '"') { token += '"'; i++; }
+            else if (char === '"') { inQuote = !inQuote; }
+            else if (char === ',' && !inQuote) { currentRow.push(token.trim()); token = ''; }
+            else if ((char === '\r' || char === '\n') && !inQuote) {
+                if (token || currentRow.length) currentRow.push(token.trim());
+                if (currentRow.length) rows.push(currentRow);
+                currentRow = []; token = '';
+            } else { token += char; }
+        }
+        if (token || currentRow.length) { currentRow.push(token.trim()); rows.push(currentRow); }
+
+        let start = (rows.length > 0 && rows[0][0].toLowerCase().includes('question')) ? 1 : 0;
+        
+        allQuestions = rows.slice(start).map(r => {
+            if(r.length < 2) return null;
+            return { q: r[0], a: r[1], w: r.slice(2).filter(w => w) };
+        }).filter(i => i && i.q && i.a);
+
+        if (allQuestions.length === 0) showError(new Error("CSV vide."));
+        else setupStartScreen();
+    }
+
+    function setupStartScreen() {
+        document.getElementById('loading-screen').classList.add('hidden');
+        document.getElementById('start-screen').classList.remove('hidden');
+        document.getElementById('db-size').textContent = allQuestions.length;
+
+        const select = document.getElementById('q-count-select');
+        select.innerHTML = ''; 
+        let options = [10, 20];
+        for(let i = 40; i < allQuestions.length; i += 20) { options.push(i); }
+        if (!options.includes(allQuestions.length)) { options.push(allQuestions.length); }
+        options = options.filter(n => n <= allQuestions.length);
+        options = [...new Set(options)];
+
+        options.forEach(num => {
+            const opt = document.createElement('option');
+            opt.value = num;
+            opt.textContent = (num === allQuestions.length) ? `Tout (${num} questions)` : `${num} questions`;
+            if(num === 40) opt.selected = true;
+            select.appendChild(opt);
+        });
+    }
+
+    // --- 3. GAME LOGIC ---
+    function startQuiz() {
+        score = 0;
+        currentIndex = 0;
+        const select = document.getElementById('q-count-select');
+        currentLimit = parseInt(select.value);
+
+        const shuffled = [...allQuestions].sort(() => 0.5 - Math.random());
+        quizPool = shuffled.slice(0, currentLimit);
+
+        document.getElementById('start-screen').classList.add('hidden');
+        document.getElementById('result-screen').classList.add('hidden');
+        document.getElementById('quiz-screen').classList.remove('hidden');
+        document.getElementById('q-total').textContent = currentLimit;
+        
+        // Stop fireworks if they were running from previous game
+        stopFireworks();
+        
+        loadQuestion();
+    }
+
+    function loadQuestion() {
+        const data = quizPool[currentIndex];
+        document.getElementById('q-current').textContent = currentIndex + 1;
+        document.getElementById('score-live').textContent = score;
+        document.getElementById('question-text').textContent = data.q.replace(/^"|"$/g, '');
+        
+        const pct = (currentIndex / currentLimit) * 100;
+        document.getElementById('progress-bar').style.width = pct + '%';
+
+        let wrongs = [...data.w].sort(() => 0.5 - Math.random()).slice(0, 3);
+        let opts = [{ t: data.a, ok: true }, ...wrongs.map(w => ({ t: w, ok: false }))];
+        opts.sort(() => 0.5 - Math.random());
+
+        const container = document.getElementById('options-container');
+        container.innerHTML = '';
+        document.getElementById('next-btn').classList.add('hidden');
+
+        opts.forEach(o => {
+            const btn = document.createElement('button');
+            btn.className = 'option-btn';
+            btn.textContent = o.t.replace(/^"|"$/g, '');
+            btn.onclick = () => handleAns(btn, o.ok, container, data.a);
+            container.appendChild(btn);
+        });
+    }
+
+    function handleAns(btn, isOk, container, correctTxt) {
+        container.querySelectorAll('.option-btn').forEach(b => b.disabled = true);
+        if (isOk) { btn.classList.add('correct'); score++; }
+        else {
+            btn.classList.add('wrong');
+            container.querySelectorAll('.option-btn').forEach(b => {
+                if(b.textContent === correctTxt.replace(/^"|"$/g, '')) b.classList.add('correct');
+            });
+        }
+        document.getElementById('score-live').textContent = score;
+        const pct = ((currentIndex + 1) / currentLimit) * 100;
+        document.getElementById('progress-bar').style.width = pct + '%';
+        document.getElementById('next-btn').classList.remove('hidden');
+    }
+
+    function nextQuestion() {
+        currentIndex++;
+        if (currentIndex < quizPool.length) loadQuestion();
+        else endQuiz();
+    }
+
+    function endQuiz() {
+        document.getElementById('quiz-screen').classList.add('hidden');
+        document.getElementById('result-screen').classList.remove('hidden');
+        document.getElementById('final-score').textContent = score;
+        document.getElementById('final-total').textContent = currentLimit;
+        
+        const r = score / currentLimit;
+        const msg = document.getElementById('feedback-text');
+        const title = document.getElementById('result-title');
+
+        if(r >= 0.8) {
+            title.textContent = "FÉLICITATIONS !";
+            title.style.color = "#27ae60";
+            if(r === 1) msg.textContent = "Un sans faute ! C'est parfait.";
+            else msg.textContent = "Excellent score ! Vous êtes prêt.";
+            
+            // LAUNCH FIREWORKS
+            startFireworks();
+        } 
+        else if(r >= 0.5) {
+            title.textContent = "Terminé";
+            title.style.color = "#2c3e50";
+            msg.textContent = "Bon travail, mais il faut encore réviser un peu.";
+        } 
+        else {
+            title.textContent = "Courage !";
+            title.style.color = "#e74c3c";
+            msg.textContent = "Ne lâchez rien, continuez à vous entraîner.";
+        }
+    }
+
+    function restartQuiz() {
+        stopFireworks();
+        document.getElementById('result-screen').classList.add('hidden');
+        document.getElementById('start-screen').classList.remove('hidden');
+    }
+
+    // ==========================================
+    // LIGHTWEIGHT FIREWORKS ENGINE
+    // ==========================================
+    const canvas = document.getElementById('fireworks-canvas');
+    const ctx = canvas.getContext('2d');
+    let fireworks = [];
+    let particles = [];
+    let animationId;
+    let isFireworksRunning = false;
+
+    // Resize canvas
+    window.addEventListener('resize', () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    });
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    function random(min, max) { return Math.random() * (max - min) + min; }
+
+    class Firework {
+        constructor(sx, sy, tx, ty) {
+            this.x = sx; this.y = sy;
+            this.tx = tx; this.ty = ty;
+            this.distanceToTarget = Math.sqrt((sx-tx)**2 + (sy-ty)**2);
+            this.distanceTraveled = 0;
+            this.coordinates = [];
+            this.coordinateCount = 3;
+            while(this.coordinateCount--) { this.coordinates.push([this.x, this.y]); }
+            this.angle = Math.atan2(ty - sy, tx - sx);
+            this.speed = 2;
+            this.acceleration = 1.05;
+            this.brightness = random(50, 70);
+            this.targetRadius = 1;
+        }
+        update(index) {
+            this.coordinates.pop();
+            this.coordinates.unshift([this.x, this.y]);
+            this.speed *= this.acceleration;
+            const vx = Math.cos(this.angle) * this.speed;
+            const vy = Math.sin(this.angle) * this.speed;
+            this.distanceTraveled = Math.sqrt((this.x - this.tx)**2 + (this.y - this.ty)**2); 
+            
+            this.x += vx; this.y += vy;
+            
+            if (this.distanceTraveled < this.distanceToTarget * 0.1 || this.speed > this.distanceToTarget) {
+                createParticles(this.tx, this.ty);
+                fireworks.splice(index, 1);
+            }
+        }
+        draw() {
+            ctx.beginPath();
+            ctx.moveTo(this.coordinates[this.coordinates.length - 1][0], this.coordinates[this.coordinates.length - 1][1]);
+            ctx.lineTo(this.x, this.y);
+            ctx.strokeStyle = 'hsl(' + random(0, 360) + ', 100%, ' + this.brightness + '%)';
+            ctx.stroke();
+        }
+    }
+
+    class Particle {
+        constructor(x, y) {
+            this.x = x; this.y = y;
+            this.coordinates = [];
+            this.coordinateCount = 5;
+            while(this.coordinateCount--) { this.coordinates.push([this.x, this.y]); }
+            this.angle = random(0, Math.PI * 2);
+            this.speed = random(1, 10);
+            this.friction = 0.95;
+            this.gravity = 1;
+            this.hue = random(0, 360);
+            this.brightness = random(50, 80);
+            this.alpha = 1;
+            this.decay = random(0.015, 0.03);
+        }
+        update(index) {
+            this.coordinates.pop();
+            this.coordinates.unshift([this.x, this.y]);
+            this.speed *= this.friction;
+            this.x += Math.cos(this.angle) * this.speed;
+            this.y += Math.sin(this.angle) * this.speed + this.gravity;
+            this.alpha -= this.decay;
+            if(this.alpha <= this.decay) { particles.splice(index, 1); }
+        }
+        draw() {
+            ctx.beginPath();
+            ctx.moveTo(this.coordinates[this.coordinates.length - 1][0], this.coordinates[this.coordinates.length - 1][1]);
+            ctx.lineTo(this.x, this.y);
+            ctx.strokeStyle = 'hsla(' + this.hue + ', 100%, ' + this.brightness + '%, ' + this.alpha + ')';
+            ctx.stroke();
+        }
+    }
+
+    function createParticles(x, y) {
+        let particleCount = 30;
+        while(particleCount--) { particles.push(new Particle(x, y)); }
+    }
+
+    function loop() {
+        if (!isFireworksRunning) return;
+        requestAnimationFrame(loop);
+        
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.globalCompositeOperation = 'lighter';
+
+        let i = fireworks.length;
+        while(i--) {
+            fireworks[i].draw();
+            fireworks[i].update(i);
+        }
+        let j = particles.length;
+        while(j--) {
+            particles[j].draw();
+            particles[j].update(j);
+        }
+
+        if(random(0, 100) < 5) {
+            fireworks.push(new Firework(canvas.width / 2, canvas.height, random(0, canvas.width), random(0, canvas.height / 2)));
+        }
+    }
+
+    function startFireworks() {
+        if(isFireworksRunning) return;
+        isFireworksRunning = true;
+        canvas.style.display = 'block';
+        loop();
+    }
+
+    function stopFireworks() {
+        isFireworksRunning = false;
+        canvas.style.display = 'none';
+        fireworks = [];
+        particles = [];
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+</script>
+
+</body>
+</html>
